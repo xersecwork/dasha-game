@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Дашина Игра">
+  <meta name="theme-color" content="#14121a">
+  <title>Дашина Игра</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Главное меню -->
+  <main class="screen scroll" id="menu">
+    <div class="wrap menu">
+      <div class="logo" id="logo" aria-hidden="true"></div>
+      <h1>Дашина Игра</h1>
+      <p class="tagline">Собери градиент из перемешанных плиток</p>
+      <button class="primary play" id="continue" type="button">
+        <span>Продолжить</span>
+        <small id="continue-sub"></small>
+      </button>
+      <button class="secondary play" id="choose" type="button">
+        <span>Уровни</span>
+        <small id="choose-sub"></small>
+      </button>
+      <button class="toggle" id="sound" type="button" role="switch" aria-checked="true">
+        <svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg>
+        <span>Звук</span>
+        <i class="switch" aria-hidden="true"></i>
+      </button>
+    </div>
+  </main>
+
+  <!-- Выбор набора -->
+  <section class="screen scroll" id="sets">
+    <div class="wrap">
+      <header class="top">
+        <button class="icon-btn" id="sets-back" type="button" aria-label="В меню">
+          <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+        </button>
+        <h2>Наборы</h2>
+        <span class="count" id="total-stars"></span>
+      </header>
+      <div class="sets" id="set-list"></div>
+    </div>
+  </section>
+
+  <!-- Выбор уровня -->
+  <section class="screen scroll" id="levels">
+    <div class="wrap">
+      <header class="top">
+        <button class="icon-btn" id="levels-back" type="button" aria-label="К наборам">
+          <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+        </button>
+        <h2 id="levels-title"></h2>
+        <span class="count" id="levels-stars"></span>
+      </header>
+      <div class="level-grid" id="level-grid"></div>
+      <p class="note" id="levels-note"></p>
+    </div>
+  </section>
+
+  <!-- Игра -->
+  <section class="screen game" id="game">
+    <header class="hud">
+      <div>
+        <span class="hud-sub" id="hud-set"></span>
+        <b id="hud-level"></b>
+      </div>
+      <div class="right">
+        <span class="hud-sub" id="hud-goal"></span>
+        <b><span id="moves">0</span> <small id="moves-word">ходов</small></b>
+      </div>
+    </header>
+
+    <div class="stage" id="stage">
+      <div class="board" id="board" role="grid" aria-label="Игровое поле"></div>
+    </div>
+
+    <p class="tip" id="tip" aria-live="polite"></p>
+
+    <nav class="controls">
+      <button class="ctl" id="back" type="button">
+        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+        <span>Назад</span>
+      </button>
+      <button class="ctl" id="restart" type="button">
+        <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v5h5"/></svg>
+        <span>Заново</span>
+      </button>
+      <button class="ctl" id="hint" type="button">
+        <svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3z"/></svg>
+        <span>Подсказка</span>
+        <i class="badge" id="hint-count">3</i>
+      </button>
+    </nav>
+  </section>
+
+  <!-- Победа -->
+  <div class="sheet" id="win" hidden>
+    <div class="card">
+      <div class="stars" id="win-stars" role="img"><span>★</span><span>★</span><span>★</span></div>
+      <h2>Градиент собран</h2>
+      <p class="result">Ходов: <b id="win-moves">0</b> <span id="win-best"></span></p>
+      <p class="sub">Эталон: <span id="win-min">0</span> · ★★★ до <span id="win-3">0</span> · ★★ до <span id="win-2">0</span></p>
+      <div class="chips" id="win-chips"></div>
+      <div class="actions">
+        <button class="secondary" id="retry" type="button">Повторить</button>
+        <button class="primary" id="next" type="button">Дальше</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
