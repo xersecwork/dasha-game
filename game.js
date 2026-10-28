@@ -66,14 +66,18 @@ function mixGrid(cols, rows, [tl, tr, bl, br]) {
   return out;
 }
 
-// Цвета плиток по углам, заданным в OKLCH. Обычно смешиваем в OKLab;
-// с mixHue — прямо в LCh, чтобы оттенок шёл по кругу (радуга без серого центра)
+// Плитки по углам, смешанным прямо в LCh: оттенок идёт по кругу, а не
+// напрямик через серый центр. Путь выбирают сами числа: от 5 до 295 — через
+// зелёный (радуга набора), от 350 до 400 — коротко, через красный
+const tileLabs = (cols, rows, corners) => mixGrid(cols, rows, corners).map((mix) => fitGamut(...mix));
+
+// Цвета плиток по углам, заданным в OKLCH. Обычно смешиваем в OKLab,
+// с mixHue — в LCh (см. tileLabs)
 function buildColors(cols, rows, corners, mixHue = false) {
-  return mixGrid(cols, rows, mixHue ? corners : corners.map(([L, C, h]) => fitGamut(L, C, h)))
-    .map((mix) => {
-      const lab = mixHue ? fitGamut(...mix) : mix;
-      return { css: labToCss(lab), light: lab[0] > 0.72 };
-    });
+  const labs = mixHue
+    ? tileLabs(cols, rows, corners)
+    : mixGrid(cols, rows, corners.map(([L, C, h]) => fitGamut(L, C, h)));
+  return labs.map((lab) => ({ css: labToCss(lab), light: lab[0] > 0.72 }));
 }
 
 // ---------- Уровни ----------
@@ -85,30 +89,31 @@ const SET_SIZE = 10;
 // правый верхний, левый нижний, правый нижний. Оттенки записаны без перехода
 // через 360° (390, а не 30). Радуга смешивается в LCh: оттенок идёт по
 // столбцам от красного до синего, светлота — по строкам.
-// mood — характер набора для палитр его уровней (см. getPalette): к какому
-// оттенку они тянутся (pull — доля, 0 — не тянутся), насыщенность C и
-// светлота L — внутри общих пределов L 0.55–0.9, C 0.08–0.2
+// mood — характер набора для палитр его уровней (см. makePalette): оттенки
+// hues (от и до, без перехода через 360°; весь круг — у Пастели и Радуги),
+// предел насыщенности C, пределы светлоты L (по умолчанию 0.35–0.92) и доля
+// уровней с переходом «тёплый → холодный» warm (только с WARM_COLD_FROM)
 const SETS = [
   { name: 'Рассвет', corners: [[0.93, 0.08, 90], [0.78, 0.15, 40], [0.64, 0.15, -10], [0.42, 0.14, -60]],
-    mood: { hue: 20, pull: 0.45, C: [0.10, 0.16] } },
+    mood: { hues: [350, 440], C: 0.16, L: [0.4, 0.92] } },   // розовый, персиковый, золотой
   { name: 'Океан',   corners: [[0.94, 0.07, 190], [0.76, 0.12, 235], [0.64, 0.12, 160], [0.36, 0.12, 265]],
-    mood: { hue: 215, pull: 0.55, C: [0.10, 0.15] } },
+    mood: { hues: [185, 265], C: 0.15, L: [0.32, 0.9] } },   // бирюзовый, голубой, синий
   { name: 'Лес',     corners: [[0.94, 0.10, 120], [0.76, 0.13, 85], [0.64, 0.15, 145], [0.38, 0.09, 175]],
-    mood: { hue: 140, pull: 0.55, C: [0.10, 0.17] } },
+    mood: { hues: [120, 170], C: 0.17 } },                   // салатовый, зелёный, хвойный
   { name: 'Пастель', corners: [[0.97, 0.06, 340], [0.80, 0.12, 290], [0.76, 0.11, 390], [0.56, 0.11, 250]],
-    mood: { hue: 0, pull: 0, C: [0.08, 0.11], L: [0.64, 0.9] } },
+    mood: { hues: [0, 360], C: 0.1, L: [0.55, 0.93] } },
   { name: 'Закат',   corners: [[0.90, 0.12, 85], [0.70, 0.19, 30], [0.66, 0.15, -15], [0.36, 0.13, -70]],
-    mood: { hue: 45, pull: 0.55, C: [0.14, 0.20] } },
+    mood: { hues: [340, 435], C: 0.19, L: [0.38, 0.9] } },   // розовый, коралловый, оранжевый
   { name: 'Ночь',    corners: [[0.74, 0.10, 300], [0.56, 0.14, 275], [0.54, 0.13, 370], [0.26, 0.08, 260]],
-    mood: { hue: 285, pull: 0.5, C: [0.11, 0.17], L: [0.55, 0.82] } },
+    mood: { hues: [250, 305], C: 0.15, L: [0.25, 0.78] } },  // синий, индиго, фиолетовый
   { name: 'Лаванда', corners: [[0.95, 0.05, 310], [0.76, 0.13, 270], [0.74, 0.14, 350], [0.46, 0.15, 300]],
-    mood: { hue: 315, pull: 0.5, C: [0.09, 0.14] } },
+    mood: { hues: [285, 340], C: 0.15, L: [0.42, 0.92] } },  // фиолетовый, сиреневый
   { name: 'Осень',   corners: [[0.92, 0.12, 100], [0.72, 0.16, 45], [0.70, 0.14, 135], [0.42, 0.11, 60]],
-    mood: { hue: 75, pull: 0.55, C: [0.12, 0.18] } },
+    mood: { hues: [20, 100], C: 0.17, L: [0.38, 0.9], warm: 0.3 } }, // бордовый, оранжевый, жёлтый
   { name: 'Лёд',     corners: [[0.96, 0.03, 215], [0.84, 0.13, 268], [0.66, 0.11, 185], [0.54, 0.15, 232]],
-    mood: { hue: 235, pull: 0.45, C: [0.09, 0.14], L: [0.6, 0.9] } },
+    mood: { hues: [195, 255], C: 0.13, L: [0.5, 0.92] } },  // ледяной голубой
   { name: 'Радуга',  corners: [[0.86, 0.12, 5], [0.82, 0.12, 295], [0.58, 0.16, 5], [0.54, 0.16, 295]], mixHue: true,
-    mood: { hue: 0, pull: 0, C: [0.15, 0.20] } },
+    mood: { hues: [0, 360], C: 0.19, L: [0.42, 0.9], warm: 0.5 } },
 ];
 const LEVEL_COUNT = SETS.length * SET_SIZE;
 
@@ -145,13 +150,37 @@ const GOLDEN = 137.5;      // золотой угол: оттенки сосед
 const PALETTE_GAP = 0.045; // наименьшее расстояние между палитрами любых двух уровней (OKLab)
 const NEIGHBOR_GAP = 0.08; // …и между палитрами соседних уровней
 const HUE_STEP = 7;        // шаг сдвига оттенка, если палитра похожа на уже созданную
+const THEME_SHIFT = 28;    // дальше этого сдвиг не уводит оттенок от темы набора
+const WARM_COLD_FROM = 71; // переход «тёплый → холодный» бывает только с этого уровня
 
-// Разница оттенков между углами (наибольшая, между правым верхним и левым
-// нижним): плавно сужается от 140° на 1-м уровне до 35° на последнем
-const hueSpread = (level) => 140 - 105 * progress(level);
+// Разница светлоты между самым светлым и самым тёмным углом сужается от 0.5
+// на 1-м уровне до 0.15 на последнем: сложность растёт за счёт неё и размера
+// поля, а не за счёт резких цветов
+const lightSpan = (level) => 0.5 - 0.35 * progress(level);
 
 // Разность оттенков a − b, приведённая к −180…180
 const hueDiff = (a, b) => ((((a - b) % 360) + 540) % 360) - 180;
+
+// Наибольшая насыщенность, при которой цвет ещё помещается в sRGB
+const maxChroma = (L, h) => Math.hypot(...fitGamut(L, 0.4, h).slice(1));
+
+// Как оси палитры ложатся на углы (левый верхний, правый верхний, левый
+// нижний, правый нижний). p — ось светлоты (0 — светлый конец, 1 — тёмный),
+// q — перпендикулярная ей ось, вдоль которой меняются насыщенность и оттенок,
+// поэтому на поле нет двух одинаковых плиток. Наклон k: 0 — светлота идёт
+// по диагонали от левого верхнего угла к правому нижнему, 0.5 — по вертикали
+const axes = (k) => ({ p: [0, 0.5 - k, 0.5 + k, 1], q: [0.5 - k, 1, 0, 0.5 + k] });
+const TILTS = [0, 0.1, 0.2, 0.3, 0.4, 0.5];
+
+// Отражения поля: какой угол канонической раскладки попадает в каждый угол.
+// Вариант v = 0…7: отражение v % 4, при v ≥ 4 ось q ещё и развёрнута
+const MIRRORS = [[0, 1, 2, 3], [1, 0, 3, 2], [2, 3, 0, 1], [3, 2, 1, 0]];
+const VARIANTS = 8;
+
+// Схемы палитр: mono — один оттенок, вторая ось — насыщенность; analog — два
+// соседних оттенка (не дальше 60°); warm — от тёплого к холодному через
+// промежуточные оттенки, только по диагонали (соседние углы — около половины пути)
+const SCHEMES = { mono: 'монохромная', analog: 'аналоговая', warm: 'тёплый → холодный' };
 
 // Среднее расстояние в OKLab между соответствующими углами двух палитр
 function paletteDistance(p, q) {
@@ -166,7 +195,7 @@ function paletteDistance(p, q) {
 // Наименьшее расстояние в OKLab между любыми двумя плитками поля.
 // Считаем квадраты расстояний — Math.hypot здесь заметно медленнее
 function tileGap(cols, rows, corners) {
-  const tiles = mixGrid(cols, rows, corners.map((c) => lchToLab(...c)));
+  const tiles = tileLabs(cols, rows, corners);
   let gap = Infinity;
   for (let i = 1; i < tiles.length; i++) {
     const [L, a, b] = tiles[i];
@@ -179,76 +208,102 @@ function tileGap(cols, rows, corners) {
   return Math.sqrt(gap);
 }
 
-// Углы палитры по базовому оттенку h. Светлота идёт по главной диагонали
-// (светлый левый верхний → тёмный правый нижний), оттенок — по побочной:
-// правый верхний и левый нижний углы расходятся на весь разброс. Цвет
-// меняется по двум разным осям, поэтому на поле нет двух одинаковых плиток,
-// а противоположных оттенков нет — центр не уходит в серый. Насыщенность,
-// если цвет не помещается в sRGB, снижает fitGamut
-function paletteCorners(h, shape) {
-  return shape.map(([L, C, offset]) => {
-    const hue = (((h + offset) % 360) + 360) % 360;
-    const [, a, b] = fitGamut(L, C, hue);
-    return [L, Math.hypot(a, b), hue];
+// Углы палитры [L, C, h] по её описанию. Оттенок записан без перехода через
+// 360° (например, 350 → 400), поэтому смешивание в LCh идёт кратчайшим путём.
+// Насыщенность задана долей f от наибольшей возможной при этих L и h (не выше
+// предела набора): так угол всегда помещается в sRGB, а разница по
+// насыщенности не съедается обрезкой у очень светлых и тёмных цветов
+function paletteCorners({ v, k, h, dh, w, top, span, f, cap }, shift = 0) {
+  const { p, q } = axes(k);
+  return MIRRORS[v % 4].map((j) => {
+    const pj = p[j], qj = v >= 4 ? 1 - q[j] : q[j];
+    const L = top - span * pj;
+    const hue = h + shift + dh * (w * pj + (1 - w) * qj);
+    return [L, (f[0] + (f[1] - f[0]) * qj) * Math.min(cap, maxChroma(L, hue)), hue];
   });
 }
 
-// Палитра уровня строится детерминированно по номеру: своё зерно, базовый
-// оттенок — золотой угол × номер, притянутый к оттенку набора. Если она
-// ближе PALETTE_GAP к палитре любого предыдущего уровня (или ближе
-// NEIGHBOR_GAP к предыдущему по номеру), сдвигаем оттенок на ±HUE_STEP,
-// ±2·HUE_STEP… и пересчитываем
+// Палитра уровня строится детерминированно по номеру: своё зерно, схема,
+// оттенок из диапазона темы набора, окно светлоты шириной lightSpan. Если
+// палитра ближе PALETTE_GAP к палитре любого предыдущего уровня (или ближе
+// NEIGHBOR_GAP к предыдущему по номеру), пробуем другие раскладки, затем
+// сдвигаем оттенок на ±HUE_STEP, ±2·HUE_STEP… в пределах темы
 function makePalette(level, made) {
   const rng = mulberry32(Math.imul(level, 0x85ebca6b) ^ 0xc0105);
   const { mood } = SETS[setOf(level)];
-  const [Llo, Lhi] = mood.L || [0.55, 0.9];
-  const [Clo, Chi] = mood.C;
-  const lerp = (k) => Llo + (Lhi - Llo) * k;
+  const [lo, hi] = mood.hues;
+  const [Lmin, Lmax] = mood.L || [0.35, 0.92];
+  const t = progress(level);
+  const span = lightSpan(level);
 
-  // Форма палитры: [L, C, смещение оттенка] для каждого угла;
-  // k — доля светлоты, на которую правый верхний темнее левого верхнего
-  // (и левый нижний светлее правого нижнего)
-  const s = hueSpread(level) / 2;
-  const dir = rng() < 0.5 ? 1 : -1;        // в какую сторону идёт оттенок
-  const tilt = (rng() - 0.5) * 0.6 * s;    // левый верхний и правый нижний — около середины
-  const C = [0, 1, 2, 3].map(() => Clo + (Chi - Clo) * rng());
-  const top = 0.97 + rng() * 0.03, bottom = rng() * 0.03;
-  const shapeFor = (k) => [
-    [lerp(top), C[0], tilt],
-    [lerp(1 - k), C[1], dir * s],
-    [lerp(k), C[2], -dir * s],
-    [lerp(bottom), C[3], -tilt],
-  ];
+  let scheme = rng() < 0.4 ? 'mono' : 'analog';
+  if (level >= WARM_COLD_FROM && rng() < (mood.warm || 0)) scheme = 'warm';
 
-  const golden = GOLDEN * level;
-  const base = mood.hue + hueDiff(golden, mood.hue) * (1 - mood.pull);
+  // Полный разброс оттенка по полю. У аналоговой он растёт с уровнем
+  // (25–40° в начале, 40–60° в конце): светлоты становится меньше, и
+  // плитки различаются за счёт оттенка
+  const dir = rng() < 0.5 ? 1 : -1;
+  const dh = scheme === 'mono' ? 0
+    : scheme === 'warm' ? 120 + 30 * rng()
+    : 25 + 15 * t + (15 + 5 * t) * rng();
 
-  // k подбираем под размер поля: берём тот, при котором две самые похожие
-  // плитки различаются сильнее всего. Сначала 0.2…0.7 с шагом 0.05, затем
-  // уточняем на полшага в обе стороны
-  const [cols, rows] = gridSize(level);
-  let bestK = 0, widest = -1;
-  const tryK = (k) => {
-    const gap = tileGap(cols, rows, paletteCorners(base, shapeFor(k)));
-    if (gap > widest) { bestK = k; widest = gap; }
+  // Начальный оттенок. Тёплый конец — оранжевый: вверх по кругу путь идёт
+  // через жёлтый и зелёный к бирюзовому и синему, вниз — через красный и
+  // розовый к фиолетовому
+  let h;
+  if (scheme === 'warm') {
+    h = dir > 0 ? 50 + 30 * rng() : 20 + 30 * rng();
+  } else {
+    const centre = hi - lo >= 360
+      ? (GOLDEN * level) % 360
+      : lo + dh / 2 + Math.max(0, hi - lo - dh) * ((level * 0.618034 + 0.25 * rng()) % 1);
+    h = centre - (dir * dh) / 2;
+  }
+
+  const desc = {
+    scheme,
+    v: Math.floor(rng() * VARIANTS),
+    k: 0,
+    h,
+    dh: dir * dh,
+    // Доля оттенка, которая меняется вместе со светлотой («тёмно-зелёный →
+    // салатовый»); остальное — вдоль второй оси
+    w: scheme === 'analog' ? 0.3 * rng() : 0,
+    top: Lmax - (Lmax - Lmin - span) * rng(), // окно светлоты внутри пределов набора
+    span,
+    // Вдоль второй оси насыщенность растёт от приглушённой до сочной: одного
+    // оттенка (до 60°) мало, чтобы соседние плитки различались
+    f: scheme === 'warm' ? [0.75 + 0.2 * rng(), 0.75 + 0.2 * rng()] : [0.3 + 0.15 * rng(), 0.9 + 0.1 * rng()],
+    cap: mood.C,
   };
-  for (let i = 0; i <= 10; i++) tryK(0.2 + i * 0.05);
-  const coarse = bestK;
-  tryK(coarse - 0.025);
-  tryK(coarse + 0.025);
-  const shape = shapeFor(bestK);
+
+  // Наклон подбираем под размер поля: берём тот, при котором две самые
+  // похожие плитки различаются сильнее всего. Переход «тёплый → холодный»
+  // идёт только по диагонали, чтобы соседние углы делили путь оттенка
+  const [cols, rows] = gridSize(level);
+  let widest = -1;
+  for (const k of scheme === 'warm' ? [0, 0.1] : TILTS) {
+    const gap = tileGap(cols, rows, paletteCorners({ ...desc, k }));
+    if (gap > widest) { desc.k = k; widest = gap; }
+  }
+  const variants = Array.from({ length: VARIANTS }, (_, i) => (desc.v + i * 3) % VARIANTS);
 
   // Запас по порогу: 1 и больше — палитра подходит
   const need = (i) => (i === made.length - 1 ? NEIGHBOR_GAP : PALETTE_GAP);
+  const reach = hi - lo >= 360 ? 180 : THEME_SHIFT;
   let best = null, bestFit = -1;
-  for (let n = 0; n <= 360 / HUE_STEP; n++) {
+  for (let n = 0; Math.ceil(n / 2) * HUE_STEP <= reach; n++) {
     const shift = (n % 2 ? 1 : -1) * Math.ceil(n / 2) * HUE_STEP; // 0, +7, −7, +14…
-    const pal = paletteCorners(base + shift, shape);
-    const fit = Math.min(Infinity, ...made.map((q, i) => paletteDistance(pal, q) / need(i)));
-    if (fit >= 1) return pal;
-    if (fit > bestFit) { best = pal; bestFit = fit; }
+    for (const v of variants) {
+      const pal = paletteCorners({ ...desc, v }, shift);
+      const fit = Math.min(Infinity, ...made.map((q, i) => paletteDistance(pal, q) / need(i)));
+      if (fit > bestFit) { best = pal; bestFit = fit; }
+      if (fit >= 1) break;
+    }
+    if (bestFit >= 1) break;
   }
-  return best; // порог недостижим — берём самую непохожую
+  best.scheme = scheme; // для отладки и таблицы палитр
+  return best; // если порог недостижим — самая непохожая из всех
 }
 
 const palettes = []; // palettes[level − 1], строятся по порядку при первом обращении
@@ -267,43 +322,260 @@ function setTint(set) {
   return labToCss(lchToLab(0.25, 0.035, (Math.atan2(b, a) * 180) / Math.PI));
 }
 
-const EDGE_LEVELS = 20; // до этого уровня закреплена ещё и часть краёв
+// ---------- Закреплённые плитки ----------
 
-// Первые 20 уровней: углы и равномерно расставленная доля краёв — от 50%
-// до 20%. Дальше только углы, на последних 10 — два противоположных угла
-// (диагональ чередуется от уровня к уровню)
-function fixedTiles(level, cols, rows) {
-  const total = cols * rows;
-  const [tl, tr, bl, br] = [0, cols - 1, total - cols, total - 1];
-  if (level > LEVEL_COUNT - SET_SIZE) return new Set(level % 2 ? [tl, br] : [tr, bl]);
+const EDGE_LEVELS = 20; // до этого уровня закреплено больше четырёх плиток
 
-  const fixed = new Set([tl, tr, bl, br]);
-  if (level > EDGE_LEVELS) return fixed;
+// Сколько плиток закрепить — как прежде: на уровнях 1–20 четыре угла и доля
+// краёв (от 50% до 20%), дальше четыре, на последних 10 уровнях — две
+function fixedCount(level, cols, rows) {
+  if (level > LEVEL_COUNT - SET_SIZE) return 2;
+  if (level > EDGE_LEVELS) return 4;
   const share = 0.5 - (0.3 * (level - 1)) / (EDGE_LEVELS - 1);
-  const edges = [ // [длина края без углов, позиция i-й плитки]
-    [cols - 2, (i) => 1 + i],                // верхний
-    [cols - 2, (i) => total - cols + 1 + i], // нижний
-    [rows - 2, (i) => (1 + i) * cols],       // левый
-    [rows - 2, (i) => (2 + i) * cols - 1],   // правый
-  ];
-  for (const [n, at] of edges) {
-    const k = Math.round(n * share);
-    for (let j = 0; j < k; j++) fixed.add(at(Math.round(((j + 1) * (n + 1)) / (k + 1)) - 1));
+  return 4 + 2 * Math.round((cols - 2) * share) + 2 * Math.round((rows - 2) * share);
+}
+
+// Фишер–Йейтс на seeded-генераторе
+function shuffle(list, rng) {
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [list[i], list[j]] = [list[j], list[i]];
   }
-  return fixed;
+  return list;
+}
+
+// Шаблоны расстановки: каждый даёт клетки [c, r], из которых выбираются опоры.
+// Первые mandatory клеток ставятся прежде остальных, остальные перемешаны
+const FIXED_PATTERNS = [
+  // Углы и случайные точки на краях: все четыре угла, если опор много, иначе
+  // одна пара противоположных
+  function cornersAndEdges(cols, rows, n, rng) {
+    const corners = rng() < 0.5
+      ? [[0, 0], [cols - 1, rows - 1], [cols - 1, 0], [0, rows - 1]]
+      : [[cols - 1, 0], [0, rows - 1], [0, 0], [cols - 1, rows - 1]];
+    const edges = [];
+    for (let c = 1; c < cols - 1; c++) edges.push([c, 0], [c, rows - 1]);
+    for (let r = 1; r < rows - 1; r++) edges.push([0, r], [cols - 1, r]);
+    const mandatory = n > 4 ? 4 : 2;
+    return { mandatory, cells: [...corners.slice(0, mandatory), ...shuffle(edges, rng)] };
+  },
+  // Диагональ: точки на обеих диагоналях поля. Когда опор мало, без углов —
+  // иначе выйдет тот же шаблон, что «углы»
+  function diagonals(cols, rows, n) {
+    const cells = [];
+    const m = Math.max(cols, rows);
+    const skip = n > 4 ? 0 : 1;
+    for (let i = skip; i < m - skip; i++) {
+      const c = Math.round((i * (cols - 1)) / (m - 1)), r = Math.round((i * (rows - 1)) / (m - 1));
+      cells.push([c, r], [cols - 1 - c, r]);
+    }
+    return { cells };
+  },
+  // Крест: центральные строка и столбец, через одну. На поле чётной ширины
+  // (высоты) точки по очереди встают в обе средние линии — так крест стоит
+  // ровно посередине
+  function cross(cols, rows, n, rng) {
+    const mid = (size, i) => (size % 2 ? (size - 1) / 2 : size / 2 - 1 + (i % 2));
+    const cells = [];
+    const pr = rng() < 0.5 ? 0 : 1, pc = rng() < 0.5 ? 0 : 1;
+    for (let r = pr, i = 0; r < rows; r += 2, i++) cells.push([mid(cols, i), r]);
+    for (let c = pc, i = 0; c < cols; c += 2, i++) cells.push([c, mid(rows, i)]);
+    return { cells };
+  },
+  // Рамка через одну: по краю поля, на больших полях — бывает с отступом в клетку
+  function frame(cols, rows, n, rng) {
+    const d = cols >= 6 && rows >= 8 && rng() < 0.5 ? 1 : 0;
+    const ring = [];
+    for (let c = d; c < cols - 1 - d; c++) ring.push([c, d]);
+    for (let r = d; r < rows - 1 - d; r++) ring.push([cols - 1 - d, r]);
+    for (let c = cols - 1 - d; c > d; c--) ring.push([c, rows - 1 - d]);
+    for (let r = rows - 1 - d; r > d; r--) ring.push([d, r]);
+    const phase = rng() < 0.5 ? 0 : 1;
+    return { cells: ring.filter((_, i) => i % 2 === phase) };
+  },
+  // Случайные точки с равномерным распределением: поле делится на полосы
+  // gx × gy, в каждой — случайная клетка
+  function scatter(cols, rows, n, rng) {
+    const gx = Math.max(1, Math.min(cols, Math.round(Math.sqrt((n * cols) / rows))));
+    const gy = Math.min(rows, Math.ceil(n / gx));
+    const cells = [];
+    for (let i = 0; i < gx; i++) {
+      for (let j = 0; j < gy; j++) {
+        const c0 = Math.floor((i * cols) / gx), c1 = Math.floor(((i + 1) * cols) / gx);
+        const r0 = Math.floor((j * rows) / gy), r1 = Math.floor(((j + 1) * rows) / gy);
+        // Ближе к середине полосы, чтобы соседние точки не слипались на границе
+        const pick = (a, b) => a + Math.floor((b - a) * (0.25 + 0.5 * rng()));
+        cells.push([pick(c0, c1), pick(r0, r1)]);
+      }
+    }
+    return { cells };
+  },
+  // Две-три линии опор, вертикальные или горизонтальные; точки на линии
+  // через одну, на соседних линиях вразбежку
+  function lines(cols, rows, n, rng) {
+    const vertical = rng() < 0.5;
+    const across = vertical ? cols : rows, along = vertical ? rows : cols;
+    const k = across >= 6 && rng() < 0.5 ? 3 : 2;
+    const cells = [];
+    for (let i = 0; i < k; i++) {
+      const x = Math.min(across - 1, Math.floor(((i + 0.5) * across) / k - 0.5 + rng()));
+      for (let y = i % 2; y < along; y += 2) cells.push(vertical ? [x, y] : [y, x]);
+    }
+    return { cells };
+  },
+];
+
+// Четверти поля, в которые попадает клетка; средние строка и столбец
+// нечётного поля относятся к обеим половинам
+function quarters(c, r, cols, rows) {
+  const xs = [], ys = [];
+  if (2 * c <= cols - 1) xs.push(0);
+  if (2 * c >= cols - 1) xs.push(1);
+  if (2 * r <= rows - 1) ys.push(0);
+  if (2 * r >= rows - 1) ys.push(2);
+  return xs.flatMap((x) => ys.map((y) => x + y));
+}
+
+// Расстановка опор из клеток шаблона. Опоры стоят вразброс: сначала
+// выбираются клетки шаблона, далеко отстоящие от уже выбранных, затем
+// требование расстояния понемногу ослабляется. Нигде нет трёх опор подряд
+// в строке или столбце, и при четырёх опорах и больше в каждой четверти
+// поля есть хотя бы одна. Если правила не дают набрать n опор (так не бывает
+// на полях игры), остаток добирается без них
+function drawFixed(cols, rows, n, cells, mandatory, rng) {
+  const total = cols * rows;
+  const on = new Set();
+  const at = (c, r) => c >= 0 && c < cols && r >= 0 && r < rows && on.has(r * cols + c);
+  // Длина отрезка опор через клетку (c, r) по направлению (dc, dr)
+  const run = (c, r, dc, dr) => {
+    let len = 1;
+    for (let k = 1; at(c + k * dc, r + k * dr); k++) len++;
+    for (let k = 1; at(c - k * dc, r - k * dr); k++) len++;
+    return len;
+  };
+  // В одной строке или столбце — не больше своей доли опор, чтобы они не
+  // выстраивались в линию (даже через одну)
+  const perLine = Math.max(2, Math.ceil((1.5 * n) / Math.min(cols, rows)));
+  const inLine = (c, r) => {
+    let col = 0, row = 0;
+    for (const p of on) { if (p % cols === c) col++; if (Math.floor(p / cols) === r) row++; }
+    return Math.max(col, row);
+  };
+  const fits = (c, r) => !on.has(r * cols + c) && run(c, r, 1, 0) < 3 && run(c, r, 0, 1) < 3 && inLine(c, r) < perLine;
+  const nearest = (c, r, skip = -1) => {
+    let d = Infinity;
+    for (const p of on) if (p !== skip) d = Math.min(d, Math.hypot(p % cols - c, Math.floor(p / cols) - r));
+    return d;
+  };
+
+  const pool = [...cells.slice(0, mandatory), ...shuffle(cells.slice(mandatory), rng)];
+  pool.slice(0, mandatory).forEach(([c, r]) => on.add(r * cols + c));
+  // Клетки шаблона — пока соседние опоры не касаются сторонами; потом,
+  // если опор всё ещё мало, любые клетки поля
+  const all = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) all.push([c, r]);
+  for (const [list, floor] of [[pool, 1.01], [shuffle(all.slice(), rng), 0]]) {
+    for (let need = 1.3 * Math.sqrt(total / n); on.size < n && need >= floor; need *= 0.85) {
+      for (const [c, r] of list) {
+        if (on.size >= n) break;
+        if (fits(c, r) && nearest(c, r) >= need) on.add(r * cols + c);
+      }
+    }
+  }
+  for (const [c, r] of all) if (on.size < n) on.add(r * cols + c);
+
+  // Пустую четверть заполняем: убираем опору из самой людной части поля
+  // (ту, что ближе всех к соседям и не единственная в своих четвертях) и
+  // ставим в пустую четверть клетку подальше от остальных
+  if (n >= 4) {
+    const count = (q) => [...on].filter((p) => quarters(p % cols, Math.floor(p / cols), cols, rows).includes(q)).length;
+    for (let q = 0; q < 4; q++) {
+      if (count(q) > 0) continue;
+      let victim = -1, crowd = Infinity;
+      for (const p of on) {
+        const qs = quarters(p % cols, Math.floor(p / cols), cols, rows);
+        const d = nearest(p % cols, Math.floor(p / cols), p);
+        if (qs.every((x) => count(x) > 1) && d < crowd) { victim = p; crowd = d; }
+      }
+      if (victim < 0) continue;
+      on.delete(victim);
+      let spot = null, room = -1;
+      for (const [c, r] of [...pool, ...all]) {
+        if (!quarters(c, r, cols, rows).includes(q) || !fits(c, r)) continue;
+        const d = nearest(c, r);
+        if (d > room) { spot = r * cols + c; room = d; }
+      }
+      on.add(spot ?? victim);
+    }
+  }
+  return on;
+}
+
+// Насколько ровно стоят опоры: наименьшее расстояние между ними минус
+// наибольшее расстояние от клетки поля до ближайшей опоры (большие пустоты)
+function evenness(on, cols, rows) {
+  const pts = [...on].map((p) => [p % cols, Math.floor(p / cols)]);
+  let close = Infinity, hole = 0;
+  pts.forEach(([c, r], i) => pts.slice(0, i).forEach(([x, y]) => { close = Math.min(close, Math.hypot(c - x, r - y)); }));
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) hole = Math.max(hole, Math.min(...pts.map(([x, y]) => Math.hypot(c - x, r - y))));
+  }
+  return close - hole;
+}
+
+const FIXED_DRAWS = 4; // из стольких случайных расстановок берём самую ровную
+
+// Одна попытка расстановки опор по шаблону (attempt — номер попытки, см. getFixedTiles)
+function placeFixed(level, cols, rows, attempt) {
+  const rng = mulberry32(Math.imul(level + 1000 * attempt, 0x27d4eb2f) ^ 0xf1ed);
+  const n = fixedCount(level, cols, rows);
+  const pattern = FIXED_PATTERNS[(level - 1 + attempt) % FIXED_PATTERNS.length];
+  const { cells, mandatory = 0 } = pattern(cols, rows, n, rng);
+  let best = null, score = -Infinity;
+  for (let i = 0; i < FIXED_DRAWS; i++) {
+    const on = drawFixed(cols, rows, n, cells, mandatory, rng);
+    const e = evenness(on, cols, rows);
+    if (e > score) { best = on; score = e; }
+  }
+  return best;
+}
+
+const fixedMemo = new Map();
+const layoutKey = (set) => [...set].sort((a, b) => a - b).join();
+
+// Плитки, закреплённые на уровне: детерминированно по номеру (своё зерно),
+// по шаблону, который зависит от номера. Если расстановка совпала с одним из
+// предыдущих уровней того же размера, берём следующий шаблон и новое зерно.
+// На последних 10 уровнях — два противоположных угла, диагональ чередуется
+// от уровня к уровню
+function getFixedTiles(level, cols, rows) {
+  const total = cols * rows;
+  if (level > LEVEL_COUNT - SET_SIZE) return new Set(level % 2 ? [0, total - 1] : [cols - 1, total - cols]);
+
+  const key = `${level}:${cols}x${rows}`;
+  if (!fixedMemo.has(key)) {
+    const taken = new Set();
+    for (let l = level - 1; l >= 1 && gridSize(l).join() === `${cols},${rows}`; l--) {
+      taken.add(layoutKey(getFixedTiles(l, cols, rows)));
+    }
+    let fixed;
+    for (let attempt = 0; attempt < FIXED_PATTERNS.length; attempt++) {
+      fixed = placeFixed(level, cols, rows, attempt);
+      if (!taken.has(layoutKey(fixed))) break;
+    }
+    fixedMemo.set(key, fixed);
+  }
+  return new Set(fixedMemo.get(key));
 }
 
 // Полное описание уровня по номеру: сетка, цвета, фиксированные плитки,
 // стартовая раскладка и эталонное число обменов
 function generateLevel(level) {
   const rng = rngFor(level);
-  // Прежде первые 13 чисел генератора уходили на цвета углов — пропускаем их,
-  // чтобы стартовые раскладки, эталоны и лучшие результаты остались прежними
-  for (let i = 0; i < 13; i++) rng();
   const [cols, rows] = gridSize(level);
-  const fixed = fixedTiles(level, cols, rows);
+  const fixed = getFixedTiles(level, cols, rows);
   const set = SETS[setOf(level)];
-  const colors = buildColors(cols, rows, getPalette(level));
+  const colors = buildColors(cols, rows, getPalette(level), true);
   const order = shuffled(cols * rows, fixed, rng);
   return {
     cols, rows, fixed, colors, order,
@@ -337,14 +609,17 @@ const store = {
 
 // Ключ остался от прежнего названия игры — чтобы не потерять прогресс
 const SAVE_KEY = 'pereliv.save';
-const SAVE_VERSION = 2; // 1 — 60 уровней (5 × 12), поля v ещё не было; 2 — 100 уровней
+// 1 — 60 уровней (5 × 12), поля v ещё не было; 2 — 100 уровней;
+// 3 — опоры на каждом уровне стоят по-своему, стартовые раскладки другие
+const SAVE_VERSION = 3;
 const UNLOCK_AT = 7;   // столько уровней набора открывают следующий набор
 const HINT_MAX = 5;
 const HINT_EVERY = 5;  // новая подсказка за каждые 5 впервые пройденных уровней
 
 // Версия 1: уровни были другими, поэтому пройденные переносим по порядку
 // на уровни 1, 2, 3… со своими звёздами. Лучший результат на прежнем поле
-// к новому не относится — сбрасываем его (0 — «ещё неизвестен»)
+// к новому не относится — сбрасываем его (0 — «ещё неизвестен»). Версия 2:
+// уровни те же, но стартовые раскладки другие — сбрасываем только лучшие результаты
 function migrateV1(done) {
   const out = {};
   Object.keys(done).map(Number).sort((a, b) => a - b)
@@ -358,6 +633,7 @@ function loadSave() {
   const src = raw && typeof raw === 'object' ? raw : {};
   const int = (v, lo, hi, def) => (Number.isInteger(v) && v >= lo && v <= hi ? v : def);
   const old = raw !== null && src.v === undefined;
+  const stale = raw !== null && src.v !== SAVE_VERSION; // нужна миграция
   const maxLevel = old ? 60 : LEVEL_COUNT;
 
   let done = {}; // done[level] = { stars, best }
@@ -369,6 +645,7 @@ function loadSave() {
     }
   }
   if (old) done = migrateV1(done);
+  else if (stale) for (const r of Object.values(done)) r.best = 0;
 
   const out = {
     v: SAVE_VERSION,
@@ -377,7 +654,7 @@ function loadSave() {
     charge: int(src.charge, 0, HINT_EVERY - 1, 0), // пройдено новых уровней к следующей подсказке
     last: old ? 1 : int(src.last, 1, LEVEL_COUNT, 1), // последний запущенный уровень
   };
-  if (old) store.set(SAVE_KEY, out); // миграция однократная
+  if (stale) store.set(SAVE_KEY, out); // миграция однократная
   return out;
 }
 
