@@ -86,6 +86,11 @@ svg {
 }
 .screen.scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; }
 
+/* Экраны набора едва окрашены его оттенком (--tint выставляется из JS) */
+#levels, #game {
+  background: radial-gradient(120% 60% at 50% 0%, var(--tint, var(--bg)), var(--bg) 75%);
+}
+
 .wrap { width: 100%; max-width: 440px; margin: 0 auto; }
 
 .count { font-size: 14px; color: var(--accent); white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -330,11 +335,17 @@ svg {
 /* Следующий непройденный уровень */
 .lv.current .lv-face { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ink); }
 
+/* Закрытый уровень: его градиент виден, но приглушён тёмной вуалью */
 .lv.locked { cursor: default; }
-.lv.locked .lv-face { background: var(--bg-2); }
-.lv.locked .lv-face::before { display: none; }
+.lv.locked .lv-face::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(20, 18, 26, 0.72);
+}
 .lv.locked:active .lv-face { transform: none; }
-.lv.locked .lv-num { background: none; color: var(--ink-dim); }
+.lv.locked .lv-num { z-index: 1; background: none; color: var(--ink-dim); }
 .lv.locked .lv-num svg { width: 20px; height: 20px; }
 
 .note { margin: 22px 0 0; text-align: center; font-size: 13px; color: var(--ink-dim); }

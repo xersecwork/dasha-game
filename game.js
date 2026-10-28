@@ -51,49 +51,64 @@ function labToCss(lab) {
 
 const cornerCss = ([L, C, h]) => labToCss(fitGamut(L, C, h));
 
-// Билинейная интерполяция углов, заданных в OKLCH. Обычно смешиваем в OKLab;
-// с mixHue — прямо в LCh, чтобы оттенок шёл по кругу (радуга без серого центра)
-function buildColors(cols, rows, corners, mixHue = false) {
-  const [tl, tr, bl, br] = mixHue ? corners : corners.map(([L, C, h]) => fitGamut(L, C, h));
+// Билинейная интерполяция четырёх углов (тройки чисел) по сетке, построчно
+function mixGrid(cols, rows, [tl, tr, bl, br]) {
   const out = [];
   for (let r = 0; r < rows; r++) {
     const v = r / (rows - 1);
     for (let c = 0; c < cols; c++) {
       const u = c / (cols - 1);
-      const mix = [0, 1, 2].map((i) =>
+      out.push([0, 1, 2].map((i) =>
         (1 - v) * ((1 - u) * tl[i] + u * tr[i]) + v * ((1 - u) * bl[i] + u * br[i])
-      );
-      const lab = mixHue ? fitGamut(...mix) : mix;
-      out.push({ css: labToCss(lab), light: lab[0] > 0.72 });
+      ));
     }
   }
   return out;
+}
+
+// Цвета плиток по углам, заданным в OKLCH. Обычно смешиваем в OKLab;
+// с mixHue — прямо в LCh, чтобы оттенок шёл по кругу (радуга без серого центра)
+function buildColors(cols, rows, corners, mixHue = false) {
+  return mixGrid(cols, rows, mixHue ? corners : corners.map(([L, C, h]) => fitGamut(L, C, h)))
+    .map((mix) => {
+      const lab = mixHue ? fitGamut(...mix) : mix;
+      return { css: labToCss(lab), light: lab[0] > 0.72 };
+    });
 }
 
 // ---------- Уровни ----------
 
 const SET_SIZE = 10;
 
-// Наборы уровней: углы [L, C, h] в OKLCH — левый верхний, правый верхний,
-// левый нижний, правый нижний. Светлый угол напротив тёмного, оттенки
-// в пределах ~150°, без противоположных пар — иначе центр уходит в серый.
-// Правый верхний и левый нижний углы расходятся по оттенку: тогда шаги цвета
-// по строке и по столбцу непохожи и на поле нет двух одинаковых плиток.
-// Оттенки записаны без перехода через 360° (390, а не 30): по ним считается
-// среднее, к которому стягиваются углы на поздних уровнях.
-// Радуга — исключение: смешивается в LCh, оттенок идёт по столбцам
-// от красного до синего, светлота — по строкам
+// Наборы уровней. corners — оформление набора (превью на карточке, полоска
+// прогресса, фоновый оттенок экранов): углы [L, C, h] в OKLCH — левый верхний,
+// правый верхний, левый нижний, правый нижний. Оттенки записаны без перехода
+// через 360° (390, а не 30). Радуга смешивается в LCh: оттенок идёт по
+// столбцам от красного до синего, светлота — по строкам.
+// mood — характер набора для палитр его уровней (см. getPalette): к какому
+// оттенку они тянутся (pull — доля, 0 — не тянутся), насыщенность C и
+// светлота L — внутри общих пределов L 0.55–0.9, C 0.08–0.2
 const SETS = [
-  { name: 'Рассвет', corners: [[0.93, 0.08, 90], [0.78, 0.15, 40], [0.64, 0.15, -10], [0.42, 0.14, -60]] },
-  { name: 'Океан',   corners: [[0.94, 0.07, 190], [0.76, 0.12, 235], [0.64, 0.12, 160], [0.36, 0.12, 265]] },
-  { name: 'Лес',     corners: [[0.94, 0.10, 120], [0.76, 0.13, 85], [0.64, 0.15, 145], [0.38, 0.09, 175]] },
-  { name: 'Пастель', corners: [[0.97, 0.06, 340], [0.80, 0.12, 290], [0.76, 0.11, 390], [0.56, 0.11, 250]] },
-  { name: 'Закат',   corners: [[0.90, 0.12, 85], [0.70, 0.19, 30], [0.66, 0.15, -15], [0.36, 0.13, -70]] },
-  { name: 'Ночь',    corners: [[0.74, 0.10, 300], [0.56, 0.14, 275], [0.54, 0.13, 370], [0.26, 0.08, 260]] },
-  { name: 'Лаванда', corners: [[0.95, 0.05, 310], [0.76, 0.13, 270], [0.74, 0.14, 350], [0.46, 0.15, 300]] },
-  { name: 'Осень',   corners: [[0.92, 0.12, 100], [0.72, 0.16, 45], [0.70, 0.14, 135], [0.42, 0.11, 60]] },
-  { name: 'Лёд',     corners: [[0.96, 0.03, 215], [0.84, 0.13, 268], [0.66, 0.11, 185], [0.54, 0.15, 232]] },
-  { name: 'Радуга',  corners: [[0.86, 0.12, 5], [0.82, 0.12, 295], [0.58, 0.16, 5], [0.54, 0.16, 295]], mixHue: true },
+  { name: 'Рассвет', corners: [[0.93, 0.08, 90], [0.78, 0.15, 40], [0.64, 0.15, -10], [0.42, 0.14, -60]],
+    mood: { hue: 20, pull: 0.45, C: [0.10, 0.16] } },
+  { name: 'Океан',   corners: [[0.94, 0.07, 190], [0.76, 0.12, 235], [0.64, 0.12, 160], [0.36, 0.12, 265]],
+    mood: { hue: 215, pull: 0.55, C: [0.10, 0.15] } },
+  { name: 'Лес',     corners: [[0.94, 0.10, 120], [0.76, 0.13, 85], [0.64, 0.15, 145], [0.38, 0.09, 175]],
+    mood: { hue: 140, pull: 0.55, C: [0.10, 0.17] } },
+  { name: 'Пастель', corners: [[0.97, 0.06, 340], [0.80, 0.12, 290], [0.76, 0.11, 390], [0.56, 0.11, 250]],
+    mood: { hue: 0, pull: 0, C: [0.08, 0.11], L: [0.64, 0.9] } },
+  { name: 'Закат',   corners: [[0.90, 0.12, 85], [0.70, 0.19, 30], [0.66, 0.15, -15], [0.36, 0.13, -70]],
+    mood: { hue: 45, pull: 0.55, C: [0.14, 0.20] } },
+  { name: 'Ночь',    corners: [[0.74, 0.10, 300], [0.56, 0.14, 275], [0.54, 0.13, 370], [0.26, 0.08, 260]],
+    mood: { hue: 285, pull: 0.5, C: [0.11, 0.17], L: [0.55, 0.82] } },
+  { name: 'Лаванда', corners: [[0.95, 0.05, 310], [0.76, 0.13, 270], [0.74, 0.14, 350], [0.46, 0.15, 300]],
+    mood: { hue: 315, pull: 0.5, C: [0.09, 0.14] } },
+  { name: 'Осень',   corners: [[0.92, 0.12, 100], [0.72, 0.16, 45], [0.70, 0.14, 135], [0.42, 0.11, 60]],
+    mood: { hue: 75, pull: 0.55, C: [0.12, 0.18] } },
+  { name: 'Лёд',     corners: [[0.96, 0.03, 215], [0.84, 0.13, 268], [0.66, 0.11, 185], [0.54, 0.15, 232]],
+    mood: { hue: 235, pull: 0.45, C: [0.09, 0.14], L: [0.6, 0.9] } },
+  { name: 'Радуга',  corners: [[0.86, 0.12, 5], [0.82, 0.12, 295], [0.58, 0.16, 5], [0.54, 0.16, 295]], mixHue: true,
+    mood: { hue: 0, pull: 0, C: [0.15, 0.20] } },
 ];
 const LEVEL_COUNT = SETS.length * SET_SIZE;
 
@@ -124,23 +139,132 @@ function gridSize(level) {
   return [Math.round(4 + 5 * t), Math.round(5 + 8 * t)];
 }
 
-// Контраст: к последнему уровню углы стягиваются к своему среднему до 65%
-// исходного разброса — соседние плитки различаются тоньше, но не сливаются
-const contrast = (level) => 1 - 0.35 * progress(level);
+// ---------- Палитры уровней ----------
 
-// Углы набора с лёгкими вариациями: оттенок плавно дрейфует внутри набора,
-// плюс небольшой шум яркости, насыщенности и оттенка от зерна уровня.
-// Возвращает [L, C, h] в OKLCH, ещё без подгонки под sRGB
-function levelCorners(level, rng) {
-  const set = SETS[setOf(level)];
-  const k = (indexOf(level) - 1) / (SET_SIZE - 1);
-  const drift = (k - 0.5) * 16 + (rng() - 0.5) * 10;
-  const raw = set.corners.map(([L, C, h]) =>
-    [L + (rng() - 0.5) * 0.03, C * (0.95 + rng() * 0.1), h + drift + (rng() - 0.5) * 6]
-  );
-  const f = contrast(level);
-  const mean = [0, 1, 2].map((i) => raw.reduce((sum, c) => sum + c[i], 0) / raw.length);
-  return raw.map((c) => c.map((x, i) => mean[i] + (x - mean[i]) * f));
+const GOLDEN = 137.5;      // золотой угол: оттенки соседних уровней далеко друг от друга
+const PALETTE_GAP = 0.045; // наименьшее расстояние между палитрами любых двух уровней (OKLab)
+const NEIGHBOR_GAP = 0.08; // …и между палитрами соседних уровней
+const HUE_STEP = 7;        // шаг сдвига оттенка, если палитра похожа на уже созданную
+
+// Разница оттенков между углами (наибольшая, между правым верхним и левым
+// нижним): плавно сужается от 140° на 1-м уровне до 35° на последнем
+const hueSpread = (level) => 140 - 105 * progress(level);
+
+// Разность оттенков a − b, приведённая к −180…180
+const hueDiff = (a, b) => ((((a - b) % 360) + 540) % 360) - 180;
+
+// Среднее расстояние в OKLab между соответствующими углами двух палитр
+function paletteDistance(p, q) {
+  let sum = 0;
+  for (let i = 0; i < 4; i++) {
+    const a = lchToLab(...p[i]), b = lchToLab(...q[i]);
+    sum += Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  }
+  return sum / 4;
+}
+
+// Наименьшее расстояние в OKLab между любыми двумя плитками поля.
+// Считаем квадраты расстояний — Math.hypot здесь заметно медленнее
+function tileGap(cols, rows, corners) {
+  const tiles = mixGrid(cols, rows, corners.map((c) => lchToLab(...c)));
+  let gap = Infinity;
+  for (let i = 1; i < tiles.length; i++) {
+    const [L, a, b] = tiles[i];
+    for (let j = 0; j < i; j++) {
+      const t = tiles[j];
+      const d = (L - t[0]) ** 2 + (a - t[1]) ** 2 + (b - t[2]) ** 2;
+      if (d < gap) gap = d;
+    }
+  }
+  return Math.sqrt(gap);
+}
+
+// Углы палитры по базовому оттенку h. Светлота идёт по главной диагонали
+// (светлый левый верхний → тёмный правый нижний), оттенок — по побочной:
+// правый верхний и левый нижний углы расходятся на весь разброс. Цвет
+// меняется по двум разным осям, поэтому на поле нет двух одинаковых плиток,
+// а противоположных оттенков нет — центр не уходит в серый. Насыщенность,
+// если цвет не помещается в sRGB, снижает fitGamut
+function paletteCorners(h, shape) {
+  return shape.map(([L, C, offset]) => {
+    const hue = (((h + offset) % 360) + 360) % 360;
+    const [, a, b] = fitGamut(L, C, hue);
+    return [L, Math.hypot(a, b), hue];
+  });
+}
+
+// Палитра уровня строится детерминированно по номеру: своё зерно, базовый
+// оттенок — золотой угол × номер, притянутый к оттенку набора. Если она
+// ближе PALETTE_GAP к палитре любого предыдущего уровня (или ближе
+// NEIGHBOR_GAP к предыдущему по номеру), сдвигаем оттенок на ±HUE_STEP,
+// ±2·HUE_STEP… и пересчитываем
+function makePalette(level, made) {
+  const rng = mulberry32(Math.imul(level, 0x85ebca6b) ^ 0xc0105);
+  const { mood } = SETS[setOf(level)];
+  const [Llo, Lhi] = mood.L || [0.55, 0.9];
+  const [Clo, Chi] = mood.C;
+  const lerp = (k) => Llo + (Lhi - Llo) * k;
+
+  // Форма палитры: [L, C, смещение оттенка] для каждого угла;
+  // k — доля светлоты, на которую правый верхний темнее левого верхнего
+  // (и левый нижний светлее правого нижнего)
+  const s = hueSpread(level) / 2;
+  const dir = rng() < 0.5 ? 1 : -1;        // в какую сторону идёт оттенок
+  const tilt = (rng() - 0.5) * 0.6 * s;    // левый верхний и правый нижний — около середины
+  const C = [0, 1, 2, 3].map(() => Clo + (Chi - Clo) * rng());
+  const top = 0.97 + rng() * 0.03, bottom = rng() * 0.03;
+  const shapeFor = (k) => [
+    [lerp(top), C[0], tilt],
+    [lerp(1 - k), C[1], dir * s],
+    [lerp(k), C[2], -dir * s],
+    [lerp(bottom), C[3], -tilt],
+  ];
+
+  const golden = GOLDEN * level;
+  const base = mood.hue + hueDiff(golden, mood.hue) * (1 - mood.pull);
+
+  // k подбираем под размер поля: берём тот, при котором две самые похожие
+  // плитки различаются сильнее всего. Сначала 0.2…0.7 с шагом 0.05, затем
+  // уточняем на полшага в обе стороны
+  const [cols, rows] = gridSize(level);
+  let bestK = 0, widest = -1;
+  const tryK = (k) => {
+    const gap = tileGap(cols, rows, paletteCorners(base, shapeFor(k)));
+    if (gap > widest) { bestK = k; widest = gap; }
+  };
+  for (let i = 0; i <= 10; i++) tryK(0.2 + i * 0.05);
+  const coarse = bestK;
+  tryK(coarse - 0.025);
+  tryK(coarse + 0.025);
+  const shape = shapeFor(bestK);
+
+  // Запас по порогу: 1 и больше — палитра подходит
+  const need = (i) => (i === made.length - 1 ? NEIGHBOR_GAP : PALETTE_GAP);
+  let best = null, bestFit = -1;
+  for (let n = 0; n <= 360 / HUE_STEP; n++) {
+    const shift = (n % 2 ? 1 : -1) * Math.ceil(n / 2) * HUE_STEP; // 0, +7, −7, +14…
+    const pal = paletteCorners(base + shift, shape);
+    const fit = Math.min(Infinity, ...made.map((q, i) => paletteDistance(pal, q) / need(i)));
+    if (fit >= 1) return pal;
+    if (fit > bestFit) { best = pal; bestFit = fit; }
+  }
+  return best; // порог недостижим — берём самую непохожую
+}
+
+const palettes = []; // palettes[level − 1], строятся по порядку при первом обращении
+
+// Четыре угла уровня [L, C, h] в OKLCH, уже в пределах sRGB:
+// левый верхний, правый верхний, левый нижний, правый нижний
+function getPalette(level) {
+  while (palettes.length < level) palettes.push(makePalette(palettes.length + 1, palettes));
+  return palettes[level - 1];
+}
+
+// Фоновый оттенок экранов набора: тёмный, едва окрашенный оттенком его углов
+function setTint(set) {
+  const [, a, b] = [0, 1, 2].map((i) =>
+    SETS[set].corners.reduce((sum, c) => sum + lchToLab(...c)[i], 0));
+  return labToCss(lchToLab(0.25, 0.035, (Math.atan2(b, a) * 180) / Math.PI));
 }
 
 const EDGE_LEVELS = 20; // до этого уровня закреплена ещё и часть краёв
@@ -173,10 +297,13 @@ function fixedTiles(level, cols, rows) {
 // стартовая раскладка и эталонное число обменов
 function generateLevel(level) {
   const rng = rngFor(level);
+  // Прежде первые 13 чисел генератора уходили на цвета углов — пропускаем их,
+  // чтобы стартовые раскладки, эталоны и лучшие результаты остались прежними
+  for (let i = 0; i < 13; i++) rng();
   const [cols, rows] = gridSize(level);
   const fixed = fixedTiles(level, cols, rows);
   const set = SETS[setOf(level)];
-  const colors = buildColors(cols, rows, levelCorners(level, rng), set.mixHue);
+  const colors = buildColors(cols, rows, getPalette(level));
   const order = shuffled(cols * rows, fixed, rng);
   return {
     cols, rows, fixed, colors, order,
@@ -589,6 +716,7 @@ function openSets() {
 function openLevels(set) {
   leaveGame();
 
+  document.documentElement.style.setProperty('--tint', setTint(set));
   $('levels-title').textContent = SETS[set].name;
   $('levels-stars').textContent = `★ ${starsIn(set)} / ${SET_SIZE * 3}`;
 
@@ -604,16 +732,13 @@ function openLevels(set) {
     btn.dataset.level = level;
     if (!open) btn.disabled = true;
 
+    // Мини-градиент из углов палитры уровня; у закрытых он приглушён
     const face = btn.appendChild(el('span', 'lv-face'));
+    const [tl, tr, bl, br] = getPalette(level).map(cornerCss);
+    Object.entries({ tl, tr, bl, br }).forEach(([k, v]) => face.style.setProperty('--' + k, v));
     const num = face.appendChild(el('span', 'lv-num'));
-    if (open) {
-      // Углы те же, что у самого уровня: levelCorners — первый потребитель генератора
-      const [tl, tr, bl, br] = levelCorners(level, rngFor(level)).map(cornerCss);
-      Object.entries({ tl, tr, bl, br }).forEach(([k, v]) => face.style.setProperty('--' + k, v));
-      num.textContent = i + 1;
-    } else {
-      num.innerHTML = LOCK_SVG;
-    }
+    if (open) num.textContent = i + 1;
+    else num.innerHTML = LOCK_SVG;
 
     const stars = btn.appendChild(el('span', 'lv-stars'));
     for (let s = 0; s < 3; s++) stars.appendChild(el('span', done && s < done.stars ? 'on' : '', '★'));
@@ -830,6 +955,7 @@ function startLevel(level) {
   });
   save.last = level;
   persist();
+  document.documentElement.style.setProperty('--tint', setTint(setOf(level)));
 
   // Сначала показываем цельный градиент, потом перемешиваем
   board.classList.remove('wave');
