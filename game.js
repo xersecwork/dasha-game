@@ -398,6 +398,13 @@ const sound = {
     this.tone(196 * 2 ** (semis / 12), { type: 'triangle', gain: 0.08, decay: 0.16 }); // от соль малой
   },
 
+  // «Я тебя люблю»: мягкий высокий звон — ми второй октавы и тихий отзвук выше
+  love() {
+    if (!this.ready()) return;
+    this.tone(1318.5, { gain: 0.06, attack: 0.01, decay: 0.35 });
+    this.tone(1975.5, { at: 0.06, gain: 0.025, attack: 0.01, decay: 0.3 });
+  },
+
   // Победа: до-ми-соль-до вверх, ноты тянутся и сливаются в аккорд
   chord() {
     if (!this.ready()) return;
@@ -642,12 +649,15 @@ function buildBoard() {
   board.innerHTML = '';
   board.style.setProperty('--cols', cols);
   cells = [];
+  // Угловые позиции поля — только у них скруглённые внешние углы
+  const corners = { 0: 'c-tl', [cols - 1]: 'c-tr', [(rows - 1) * cols]: 'c-bl', [cols * rows - 1]: 'c-br' };
 
   for (let pos = 0; pos < cols * rows; pos++) {
     const cell = document.createElement('div');
     cell.className = 'tile';
     cell.dataset.pos = pos;
     cell.setAttribute('role', 'gridcell');
+    if (corners[pos]) cell.classList.add(corners[pos]);
     if (state.fixed.has(pos)) {
       cell.classList.add('fixed');
       if (state.colors[pos].light) cell.classList.add('light');
@@ -659,18 +669,20 @@ function buildBoard() {
   state.order.forEach((_, pos) => paint(pos));
 }
 
+// color тоже ставим: им рисуется полупиксельная тень, закрывающая щели между плитками
 function paint(pos) {
-  cells[pos].firstChild.style.backgroundColor = state.colors[state.order[pos]].css;
+  const sw = cells[pos].firstChild;
+  sw.style.backgroundColor = sw.style.color = state.colors[state.order[pos]].css;
 }
 
 // Подгоняем размер плитки под свободное место. clientWidth/Height, а не
-// getBoundingClientRect — на размер не должен влиять transform экрана
+// getBoundingClientRect — на размер не должен влиять transform экрана.
+// Плитка — целое число пикселей, чтобы между плитками не было щелей
 function fit() {
   const t = Math.max(16, Math.floor(Math.min(stage.clientWidth / state.cols, stage.clientHeight / state.rows)));
   state.tile = t;
   board.style.setProperty('--tile', t + 'px');
-  board.style.setProperty('--pad', Math.max(1, Math.round(t * 0.045)) + 'px');
-  board.style.setProperty('--radius', Math.round(t * 0.16) + 'px');
+  board.style.setProperty('--corner', Math.min(14, Math.round(t * 0.22)) + 'px');
 }
 
 function updateHud() {
@@ -907,6 +919,68 @@ function next() {
   else if (levelUnlocked(n)) startLevel(n);
   else openLevels(setOf(state.level));
 }
+
+// ---------- «Я тебя люблю» ----------
+
+const HEART_PATH = 'M12 21s-7.4-4.5-9.5-9.1C1 8.6 3 4.5 6.7 4.5c2.2 0 3.6 1.2 5.3 3.2 1.7-2 3.1-3.2 5.3-3.2 3.7 0 5.7 4.1 4.2 7.4C19.4 16.5 12 21 12 21z';
+const HEART_COLORS = ['#ff4d6d', '#ff758f', '#ff8fa3', '#ffb3c1', '#ff5c8a', '#ff2e63', '#e5383b', '#c9184a'];
+const HEART_MAX = 80; // одновременно живущих сердечек, чтобы не тормозило
+const hearts = $('hearts');
+const rand = (a, b) => a + Math.random() * (b - a);
+
+// Одно сердечко: вылетает из точки (x, y) вверх и в сторону, покачивается,
+// растёт и растворяется, затем удаляется из DOM
+function heart(x, y) {
+  const size = Math.round(rand(14, 36));
+  const node = el('span', 'heart');
+  node.innerHTML = `<svg viewBox="0 0 24 24"><path d="${HEART_PATH}"/></svg>`;
+  node.style.cssText = `width:${size}px;height:${size}px;left:${x - size / 2}px;top:${y - size / 2}px;` +
+    `color:${HEART_COLORS[Math.floor(Math.random() * HEART_COLORS.length)]}`;
+  hearts.appendChild(node);
+
+  const angle = (rand(-150, -30) * Math.PI) / 180; // веер вверх
+  const dist = rand(110, 280);
+  const dx = Math.cos(angle) * dist;
+  const dy = Math.sin(angle) * dist - rand(40, 160);
+  const sway = rand(8, 22) * (Math.random() < 0.5 ? -1 : 1);
+  const waves = rand(1.2, 2.6);
+  const grow = rand(1.1, 1.7);
+  const spin = rand(-25, 25);
+
+  const frames = [];
+  for (let k = 0; k <= 12; k++) {
+    const t = k / 12;
+    const e = 1 - (1 - t) ** 2; // быстрый вылет, плавное торможение
+    const s = Math.sin(t * waves * 2 * Math.PI);
+    frames.push({
+      offset: t,
+      transform: `translate(${(dx * e + sway * s).toFixed(1)}px, ${(dy * e).toFixed(1)}px) ` +
+        `rotate(${(spin * t + s * 12).toFixed(1)}deg) scale(${(0.3 + (grow - 0.3) * e).toFixed(2)})`,
+      opacity: t < 0.1 ? t / 0.1 : t < 0.55 ? 1 : (1 - t) / 0.45,
+    });
+  }
+  const anim = node.animate(frames, { duration: rand(1500, 2500), fill: 'both' });
+  anim.onfinish = () => node.remove();
+}
+
+function loveBurst(btn) {
+  btn.animate([{ transform: 'scale(0.95)' }, { transform: 'scale(1)' }],
+    { duration: 300, easing: 'cubic-bezier(0.3, 1.6, 0.5, 1)' });
+  sound.love();
+  try { navigator.vibrate?.(15); } catch { /* нет API */ }
+
+  const r = btn.getBoundingClientRect();
+  const n = 12 + Math.floor(Math.random() * 9); // 12–20 за нажатие
+  for (let i = 0; i < n; i++) {
+    // Сверх лимита старые сердечки уступают место новым
+    if (hearts.childElementCount >= HEART_MAX) hearts.firstChild.remove();
+    heart(r.left + r.width / 2 + rand(-0.3, 0.3) * r.width, r.top + r.height / 2 + rand(-0.2, 0.2) * r.height);
+  }
+}
+
+// Web Animations API есть в Safari с 13.1; без него кнопка просто ничего не делает
+const loveBtn = $('love');
+if (loveBtn.animate) loveBtn.addEventListener('click', () => loveBurst(loveBtn));
 
 // ---------- Запуск ----------
 

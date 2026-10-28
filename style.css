@@ -10,8 +10,7 @@
   --ring: #ffffff;
 
   --tile: 48px;   /* размер плитки — выставляется из JS */
-  --pad: 2px;     /* половина зазора между плитками */
-  --radius: 7px;
+  --corner: 14px; /* скругление внешних углов поля — выставляется из JS */
 
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 
@@ -163,6 +162,39 @@ svg {
 .play small { font-size: 13px; font-weight: 500; opacity: 0.7; }
 .play.secondary { margin-top: -4px; font-size: 17px; }
 .play.secondary small { color: var(--accent); opacity: 1; }
+
+/* Кнопка «Я тебя люблю» */
+.love {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 60px;
+  padding: 16px;
+  border-radius: 18px;
+  background: linear-gradient(120deg, #ff8a7a, #ff5c8a 50%, #b65cff);
+  color: #fff;
+  font-size: 19px;
+  font-weight: 800;
+  box-shadow: 0 8px 24px rgba(255, 92, 138, 0.35);
+}
+.love svg { flex: none; width: 24px; height: 24px; fill: currentColor; stroke: none; }
+
+/* Слой с сердечками: поверх всего, не ловит касания и не выходит за экран */
+.hearts {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  overflow: hidden;
+  pointer-events: none;
+}
+.heart {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform, opacity;
+}
+.heart svg { display: block; width: 100%; height: 100%; fill: currentColor; stroke: none; }
 
 /* ---------- Выбор набора ---------- */
 .sets { display: flex; flex-direction: column; gap: 10px; margin: 22px 0 8px; }
@@ -327,47 +359,64 @@ svg {
   place-items: center;
 }
 
+/* Плитки впритык, без зазоров: поле — цельное полотно градиента.
+   Размер плитки — целые пиксели, ширина поля ровно tile × cols */
 .board {
   display: grid;
   grid-template-columns: repeat(var(--cols, 5), var(--tile));
   grid-auto-rows: var(--tile);
-  border-radius: 14px;
-  transition: border-radius 0.5s;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  width: calc(var(--tile) * var(--cols, 5));
+  border-radius: var(--corner);
 }
 
 .tile {
   position: relative;
+  margin: 0;
+  padding: 0;
   cursor: pointer;
 }
 
+/* color = цвет плитки (из JS): тень в полпикселя её же цвета закрывает
+   субпиксельные щели между соседями на iPhone */
 .swatch {
   position: absolute;
-  inset: var(--pad);
-  border-radius: var(--radius);
-  transition:
-    transform 0.28s var(--ease),
-    box-shadow 0.2s,
-    inset 0.5s,
-    border-radius 0.5s;
+  inset: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: 0 0 0 0.5px currentColor;
+  transition: transform 0.28s var(--ease), box-shadow 0.2s;
 }
+
+/* Скруглены только внешние углы всего поля */
+.tile.c-tl .swatch { border-top-left-radius: var(--corner); }
+.tile.c-tr .swatch { border-top-right-radius: var(--corner); }
+.tile.c-bl .swatch { border-bottom-left-radius: var(--corner); }
+.tile.c-br .swatch { border-bottom-right-radius: var(--corner); }
 
 /* Плавная смена цвета при перемешивании */
 .board.fade .swatch {
-  transition: background-color 0.6s ease, transform 0.28s, inset 0.5s, border-radius 0.5s;
+  transition: background-color 0.6s ease, color 0.6s ease, transform 0.28s;
 }
 
-/* Выбранная плитка */
+/* Выбранная плитка: внутренняя рамка и лёгкое увеличение transform'ом —
+   соседи не сдвигаются */
 .tile.selected { z-index: 2; }
 .tile.selected .swatch {
-  transform: scale(1.14);
-  box-shadow: 0 0 0 3px var(--ring), 0 8px 22px rgba(0, 0, 0, 0.45);
+  transform: scale(1.08);
+  box-shadow:
+    inset 0 0 0 3px var(--ring),
+    inset 0 0 0 4px rgba(0, 0, 0, 0.25),
+    0 6px 18px rgba(0, 0, 0, 0.45);
 }
 
 /* Плитка, поставленная подсказкой */
 .tile.hinted { z-index: 2; }
 .tile.hinted .swatch {
-  box-shadow: 0 0 0 3px var(--accent), 0 0 18px rgba(255, 184, 107, 0.6);
-  transition: transform 0.28s var(--ease), box-shadow 0.6s, inset 0.5s, border-radius 0.5s;
+  box-shadow: inset 0 0 0 3px var(--accent), 0 0 18px rgba(255, 184, 107, 0.6);
+  transition: transform 0.28s var(--ease), box-shadow 0.6s;
 }
 
 /* Плитка во время перелёта — поверх остальных */
@@ -396,10 +445,8 @@ svg {
   animation-delay: calc(var(--d, 0) * 1ms);
 }
 
-/* Собранное поле: зазоры исчезают, остаётся цельный градиент */
-.board.solved { overflow: hidden; }
+/* Собранное поле: точки на зафиксированных плитках гаснут, остаётся чистый градиент */
 .board.solved .tile { cursor: default; }
-.board.solved .swatch { inset: 0; border-radius: 0; }
 .board.solved .tile.fixed .swatch::after { opacity: 0; }
 
 .tip {
